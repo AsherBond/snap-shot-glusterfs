@@ -3822,6 +3822,10 @@ glusterd_op_stage_validate (glusterd_op_t op, dict_t *dict, char **op_errstr,
                         ret = glusterd_op_stage_sys_exec (dict, op_errstr);
                         break;
 
+                case GD_OP_SNAP:
+                        ret = 0;
+                        break;
+
                 default:
                         gf_log (this->name, GF_LOG_ERROR, "Unknown op %s",
                                 gd_op_list[op]);
@@ -3936,6 +3940,10 @@ glusterd_op_commit_perform (glusterd_op_t op, dict_t *dict, char **op_errstr,
 
                 case GD_OP_SYS_EXEC:
                         ret = glusterd_op_sys_exec (dict, op_errstr, rsp_dict);
+                        break;
+
+                case GD_OP_SNAP:
+                        ret = 0;
                         break;
 
                 default:

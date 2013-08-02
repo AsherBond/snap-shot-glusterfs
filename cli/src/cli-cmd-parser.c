@@ -1749,6 +1749,458 @@ out:
         return ret;
 }
 
+int32_t
+cli_snap_create_parse (dict_t *dict, const char **words, int wordcount,
+                       unsigned cmdi, char **opwords)
+{
+        char               *snap_name = NULL;
+        int32_t            volcount = -1;
+        int32_t            no_of_options = -1;
+        char               volname_buf[PATH_MAX] = "";
+        int32_t            ret     = -1;
+        int                i       = 0;
+
+
+        /* Checking number of volumes in the create command */
+        volcount = cmdi - 2;
+        if (volcount > 6) {
+                cli_out ("Snapshot of more than 6 volumes at the same "
+                         "time is not supported.");
+                ret = -1;
+                goto out;
+        }
+
+        /* no of options after the create opword */
+        no_of_options = (wordcount - 1) - cmdi;
+
+        if (no_of_options > 2) {
+                cli_out ("Too Many arguments.");
+                ret = -1;
+                goto out;
+        }
+
+        if (no_of_options == 2) {
+                /* Two options are present after create opword */
+
+                /* If the option after create is not another opword
+                 * and the last option is force, then save the details
+                 * else there is an opword mismatch. */
+                if ((!strcmp(words[cmdi+2], "force")) &&
+                    (str_getunamb (words[cmdi+1], opwords) == NULL)) {
+                        snap_name = (char *)words[cmdi+1];
+                        ret = dict_set_uint32 (dict, "is_force",
+                                               _gf_true);
+                        if (ret)
+                                goto out;
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        ret = -1;
+                        goto out;
+                }
+        } else if (no_of_options == 1) {
+                /* Only one option is present after create keyword */
+
+                if (!strcmp(words[cmdi+1], "force")) {
+                        /* If the last option is force, set it in dict */
+                        ret = dict_set_uint32 (dict, "is_force",
+                                               _gf_true);
+                        if (ret)
+                                goto out;
+                } else if (str_getunamb (words[cmdi+1], opwords) == NULL) {
+                        /* If the last option is not any opword,
+                         * save the snap_name else there is an
+                         * opword mismatch  */
+                        snap_name = (char *)words[cmdi+1];
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        ret = -1;
+                        goto out;
+                }
+        } else if (no_of_options != 0) {
+                /* Based on the create index calculations and the options
+                 * checks above, you my friend should not land here. If
+                 * however you have then something sinister is going on,
+                 * and it's time to debug */
+                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                ret = -1;
+                goto out;
+        }
+
+        /* Saving the snap_name in the dict */
+        if (snap_name) {
+                ret = dict_set_str (dict, "snap_name", snap_name);
+                if (ret) {
+                        gf_log ("", GF_LOG_ERROR, "Unable to save snap-name");
+                        goto out;
+                }
+        }
+
+        /* Saving the volume names */
+        for (i = 2; i < volcount + 2; i++) {
+                ret = snprintf (volname_buf, sizeof(volname_buf) - 1,
+                                "volname%d", i - 1);
+                volname_buf[ret] = '\0';
+
+                ret = dict_set_str (dict, volname_buf, (char *)words[i]);
+                if (ret) {
+                        gf_log ("", GF_LOG_ERROR, "Unable to save %s",
+                                volname_buf);
+                        goto out;
+                }
+        }
+
+        /* Saving the volcount */
+        ret = dict_set_int32 (dict, "volcount", volcount);
+        if (ret) {
+                gf_log ("", GF_LOG_ERROR, "Unable to save volcount");
+                goto out;
+        }
+
+out:
+        return ret;
+}
+
+int32_t
+cli_snap_info_parse (dict_t *dict, const char **words, int wordcount,
+                     char **opwords)
+{
+        int32_t            ret     = -1;
+
+        /* Check if any other option is given with info
+         * other than snap-name */
+        if (wordcount > 5) {
+                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                ret = -1;
+                goto out;
+        }
+
+        if (wordcount == 5) {
+                /* a snap-name is present. Check if its an
+                 * opword else save it in dict */
+                if (str_getunamb (words[wordcount - 1], opwords) == NULL) {
+                        ret = dict_set_str (dict, "snap_name",
+                                            (char *)words[wordcount - 1]);
+                        if (ret) {
+                                gf_log ("", GF_LOG_ERROR, "Unable to save "
+                                                          "snap-name");
+                                goto out;
+                        }
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        ret = -1;
+                        goto out;
+                }
+        }
+
+        ret = 0;
+out:
+        return ret;
+}
+
+int32_t
+cli_snap_restore_parse (dict_t *dict, const char **words, int wordcount,
+                        char **opwords)
+{
+        int32_t            ret     = -1;
+        int32_t            no_of_options   = -1;
+        char              *vol_opts = NULL;
+        char              *mount_point = NULL;
+
+        if (wordcount < 5) {
+                cli_out ("Too Few arguments.");
+                ret = -1;
+                goto out;
+        }
+
+        if (str_getunamb (words[4], opwords) != NULL) {
+                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                ret = -1;
+                goto out;
+        } else {
+                ret = dict_set_str (dict, "snap_name", (char *)words[4]);
+                if (ret) {
+                        gf_log ("", GF_LOG_ERROR, "Unable to "
+                                "save snap-name");
+                        goto out;
+                }
+        }
+
+        /* no of options after the snap-name */
+        no_of_options = (wordcount - 1) - 4;
+
+        if (no_of_options > 2) {
+                cli_out ("Too Many arguments.");
+                ret = -1;
+                goto out;
+        }
+
+        if (no_of_options == 2) {
+                /* Two options are present after snap-name */
+
+                /* If the last two options are not opwords and
+                 * the option after snap-name is not RO/RW,
+                 * and the last option is either RO or RW,
+                 * then save the details, else there is an
+                 * opword mismatch */
+
+                if ((str_getunamb (words[5], opwords) == NULL) &&
+                    (str_getunamb (words[6], opwords) == NULL) &&
+                    ((strcmp (words[5], "RO")) && (strcmp(words[5], "RW"))) &&
+                    ((!strcmp (words[6], "RO")) ||
+                     (!strcmp (words[6], "RW")))) {
+                        mount_point = (char *)words[5];
+                        vol_opts = (char *)words[6];
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        ret = -1;
+                        goto out;
+                }
+        } else if (no_of_options == 1) {
+                /* Only one option is present after create keyword */
+
+                /* If the last option is an opword, then there is
+                 * an opword mismatch */
+                if (str_getunamb (words[5], opwords) == NULL) {
+                        /* If the last option is either RO or RW, then
+                         * it's vol_opts or else it's mount-point. */
+                        if ((!strcmp (words[5], "RO")) ||
+                            (!strcmp (words[5], "RW"))) {
+                                vol_opts = (char *)words[5];
+                        } else
+                                mount_point = (char *)words[5];
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        ret = -1;
+                        goto out;
+                }
+        } else if (no_of_options != 0) {
+                /* Based on the create index calculations and the options
+                 * checks above, you my friend should not land here. If
+                 * however you have then something sinister is going on,
+                 * and it's time to debug */
+                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                ret = -1;
+                goto out;
+        }
+
+        if (mount_point) {
+                ret = dict_set_str (dict, "mount-point", mount_point);
+                if (ret) {
+                        gf_log ("", GF_LOG_ERROR, "Unable to "
+                                "save mount-point");
+                        goto out;
+                }
+        }
+
+        if (vol_opts) {
+                ret = dict_set_str (dict, "vol-opts", vol_opts);
+                if (ret) {
+                        gf_log ("", GF_LOG_ERROR, "Unable to "
+                                "save vol opts.");
+                        goto out;
+                }
+        }
+
+        ret = 0;
+out:
+        return ret;
+}
+
+int32_t
+cli_snap_delete_parse (dict_t *dict, const char **words, int wordcount,
+                        char **opwords)
+{
+        int32_t            ret     = -1;
+        int32_t            no_of_options   = -1;
+
+        if (wordcount < 5) {
+                cli_out ("Too Few arguments.");
+                ret = -1;
+                goto out;
+        }
+
+        if (str_getunamb (words[4], opwords) != NULL) {
+                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                ret = -1;
+                goto out;
+        } else {
+                ret = dict_set_str (dict, "snap_name", (char *)words[4]);
+                if (ret) {
+                        gf_log ("", GF_LOG_ERROR, "Unable to "
+                                "save snap-name");
+                        goto out;
+                }
+        }
+
+        /* no of options after the snap-name */
+        no_of_options = (wordcount - 1) - 4;
+
+        if (no_of_options > 1) {
+                cli_out ("Too Many arguments.");
+                ret = -1;
+                goto out;
+        }
+
+        if (no_of_options == 1) {
+                if (!strcmp (words[5], "force")) {
+                        ret = dict_set_uint32 (dict, "is_force",
+                                               _gf_true);
+                        if (ret)
+                                goto out;
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        ret = -1;
+                        goto out;
+                }
+        }
+
+        ret = 0;
+out:
+        return ret;
+}
+
+int32_t
+cli_cmd_snapshot_parse (const char **words, int wordcount, dict_t **options)
+{
+        int32_t            ret     = -1;
+        dict_t             *dict   = NULL;
+        gf1_cli_snapshot   type    = GF_SNAP_OPTION_TYPE_NONE;
+        int                i       = 0;
+        unsigned           cmdi    = 0;
+        char               *opwords[] = { "create", "status", "list",
+                                          "info", "config", "restore",
+                                          "delete", "force", NULL};
+        char               *w = NULL;
+
+        GF_ASSERT (words);
+        GF_ASSERT (options);
+
+        dict = dict_new ();
+        if (!dict)
+                goto out;
+
+        /* syntax:
+         * volume snapshot <{$volname1...$volname6}> create [snap-name] [force]
+         * volume snapshot <$volname> status
+         * volume snapshot <$volname> list
+         * volume snapshot <$volname> info [snap-name]
+         * volume snapshot <$volname> config <snap-name|all> <RO/RW> <barrier-length>
+         * volume snapshot <$volname> restore <snap-name> [mnt-path] [RO/RW]
+         * volume snapshot <$volname> delete <snap-name|all> [force]
+         */
+
+        /* Lowest wordcount possible incase it is a list command */
+        if (wordcount < 4)
+                goto out;
+
+        /* In cases where the vol-name is not given
+         * parsing fails */
+        w = str_getunamb (words[2], opwords);
+        if (w)
+                goto out;
+
+        w = str_getunamb (words[3], opwords);
+        if (!w) {
+                /* Might be a create operation hence the
+                 * fourth word (word[3]) is not an opword, else
+                 * there is an opword mismatch */
+
+                /* Looking for the position of the first create keyword */
+                for (i = 4; i< wordcount; i++) {
+                        if (!strcmp (words[i], "create")) {
+                                type = GF_SNAP_OPTION_TYPE_CREATE;
+                                cmdi = i;
+                                break;
+                        }
+                }
+
+                /* If not a create op, then there is a mismatch */
+                if (type != GF_SNAP_OPTION_TYPE_CREATE) {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        goto out;
+                }
+        } else {
+                /* Check which op is intended */
+                if (strcmp (w, "create") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_CREATE;
+                        cmdi = 3;
+                        ret = cli_snap_create_parse (dict, words, wordcount,
+                                                     cmdi, opwords);
+                        if (ret) {
+                                gf_log ("", GF_LOG_ERROR,
+                                        "create command parsing failed.");
+                                goto out;
+                        }
+                } else if (strcmp (w, "status") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_STATUS;
+                        /* Check if any other option is given with status */
+                        if (wordcount > 4) {
+                                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                                goto out;
+                        }
+                } else if (strcmp (w, "list") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_LIST;
+                        /* Check if any other option is given with list */
+                        if (wordcount > 4) {
+                                gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                                goto out;
+                        }
+                } else if (strcmp (w, "info") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_INFO;
+
+                        ret = cli_snap_info_parse (dict, words, wordcount,
+                                                     opwords);
+                        if (ret) {
+                                gf_log ("", GF_LOG_ERROR,
+                                        "info command parsing failed.");
+                                goto out;
+                        }
+                } else if (strcmp (w, "config") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_CONFIG;
+                } else if (strcmp (w, "restore") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_RESTORE;
+
+                        ret = cli_snap_restore_parse (dict, words, wordcount,
+                                                     opwords);
+                        if (ret) {
+                                gf_log ("", GF_LOG_ERROR,
+                                        "restore command parsing failed.");
+                                goto out;
+                        }
+                } else if (strcmp (w, "delete") == 0) {
+                        type = GF_SNAP_OPTION_TYPE_DELETE;
+
+                        ret = cli_snap_delete_parse (dict, words, wordcount,
+                                                     opwords);
+                        if (ret) {
+                                gf_log ("", GF_LOG_ERROR,
+                                        "delete command parsing failed.");
+                                goto out;
+                        }
+                } else {
+                        gf_log ("", GF_LOG_ERROR, "Opword Mismatch");
+                        goto out;
+                }
+        }
+
+        ret = dict_set_int32 (dict, "type", type);
+        if (ret) {
+                gf_log ("", GF_LOG_ERROR, "Failed to set type");
+                goto out;
+        }
+
+        /* If you got so far, input is valid */
+        ret = 0;
+out:
+        if (ret) {
+                if (dict)
+                        dict_destroy (dict);
+        } else
+                *options = dict;
+
+
+        return ret;
+}
 
 int32_t
 cli_cmd_gsync_set_parse (const char **words, int wordcount, dict_t **options)
