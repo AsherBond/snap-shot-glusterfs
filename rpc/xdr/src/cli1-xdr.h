@@ -114,6 +114,18 @@ enum gf1_cli_op_flags {
 };
 typedef enum gf1_cli_op_flags gf1_cli_op_flags;
 
+enum gf1_cli_snapshot {
+	GF_SNAP_OPTION_TYPE_NONE = 0,
+	GF_SNAP_OPTION_TYPE_CREATE = 1,
+	GF_SNAP_OPTION_TYPE_STATUS = 2,
+	GF_SNAP_OPTION_TYPE_LIST = 3,
+	GF_SNAP_OPTION_TYPE_INFO = 4,
+	GF_SNAP_OPTION_TYPE_CONFIG = 5,
+	GF_SNAP_OPTION_TYPE_RESTORE = 6,
+	GF_SNAP_OPTION_TYPE_DELETE = 7,
+};
+typedef enum gf1_cli_snapshot gf1_cli_snapshot;
+
 enum gf1_cli_gsync_set {
 	GF_GSYNC_OPTION_TYPE_NONE = 0,
 	GF_GSYNC_OPTION_TYPE_START = 1,
@@ -271,6 +283,7 @@ extern  bool_t xdr_gf1_cli_friends_list (XDR *, gf1_cli_friends_list*);
 extern  bool_t xdr_gf1_cli_get_volume (XDR *, gf1_cli_get_volume*);
 extern  bool_t xdr_gf1_cli_sync_volume (XDR *, gf1_cli_sync_volume*);
 extern  bool_t xdr_gf1_cli_op_flags (XDR *, gf1_cli_op_flags*);
+extern  bool_t xdr_gf1_cli_snapshot (XDR *, gf1_cli_snapshot*);
 extern  bool_t xdr_gf1_cli_gsync_set (XDR *, gf1_cli_gsync_set*);
 extern  bool_t xdr_gf1_cli_stats_op (XDR *, gf1_cli_stats_op*);
 extern  bool_t xdr_gf1_cli_top_op (XDR *, gf1_cli_top_op*);
@@ -299,6 +312,7 @@ extern bool_t xdr_gf1_cli_friends_list ();
 extern bool_t xdr_gf1_cli_get_volume ();
 extern bool_t xdr_gf1_cli_sync_volume ();
 extern bool_t xdr_gf1_cli_op_flags ();
+extern bool_t xdr_gf1_cli_snapshot ();
 extern bool_t xdr_gf1_cli_gsync_set ();
 extern bool_t xdr_gf1_cli_stats_op ();
 extern bool_t xdr_gf1_cli_top_op ();

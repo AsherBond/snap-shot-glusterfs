@@ -135,6 +135,17 @@ xdr_gf1_cli_op_flags (XDR *xdrs, gf1_cli_op_flags *objp)
 }
 
 bool_t
+xdr_gf1_cli_snapshot (XDR *xdrs, gf1_cli_snapshot *objp)
+{
+	register int32_t *buf;
+        buf = NULL;
+
+	 if (!xdr_enum (xdrs, (enum_t *) objp))
+		 return FALSE;
+	return TRUE;
+}
+
+bool_t
 xdr_gf1_cli_gsync_set (XDR *xdrs, gf1_cli_gsync_set *objp)
 {
 	register int32_t *buf;
