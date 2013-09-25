@@ -2474,6 +2474,19 @@ client_graph_builder (volgen_graph_t *graph, glusterd_volinfo_t *volinfo,
                 }
         }
 
+
+        ret = glusterd_volinfo_get_boolean (volinfo, "features.file-snapshot");
+        if (ret == -1)
+                goto out;
+        if (ret) {
+                xl = volgen_graph_add (graph, "features/qemu-block", volname);
+
+                if (!xl) {
+                        ret = -1;
+                        goto out;
+                }
+        }
+
         /* Logic to make sure NFS doesn't have performance translators by
            default for a volume */
         tmp_data = dict_get (set_dict, "nfs-volume-file");
@@ -3215,7 +3228,7 @@ enumerate_transport_reqs (gf_transport_type type, char **types)
         }
 }
 
-static int
+int
 generate_client_volfiles (glusterd_volinfo_t *volinfo,
                           glusterd_client_type_t client_type)
 {

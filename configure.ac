@@ -67,6 +67,8 @@ AC_CONFIG_FILES([Makefile
                 xlators/performance/write-behind/src/Makefile
                 xlators/performance/read-ahead/Makefile
                 xlators/performance/read-ahead/src/Makefile
+                xlators/performance/readdir-ahead/Makefile
+                xlators/performance/readdir-ahead/src/Makefile
                 xlators/performance/io-threads/Makefile
                 xlators/performance/io-threads/src/Makefile
                 xlators/performance/io-cache/Makefile
@@ -119,12 +121,16 @@ AC_CONFIG_FILES([Makefile
                 xlators/features/index/src/Makefile
                 xlators/features/protect/Makefile
                 xlators/features/protect/src/Makefile
+                xlators/features/gfid-access/Makefile
+                xlators/features/gfid-access/src/Makefile
                 xlators/playground/Makefile
                 xlators/playground/template/Makefile
                 xlators/playground/template/src/Makefile
                 xlators/encryption/Makefile
                 xlators/encryption/rot-13/Makefile
                 xlators/encryption/rot-13/src/Makefile
+		xlators/features/qemu-block/Makefile
+		xlators/features/qemu-block/src/Makefile
                 xlators/system/Makefile
                 xlators/system/posix-acl/Makefile
                 xlators/system/posix-acl/src/Makefile
@@ -351,6 +357,33 @@ fi
 AC_SUBST(FUSERMOUNT_SUBDIR)
 #end FUSERMOUNT section
 
+# QEMU_BLOCK section
+
+AC_ARG_ENABLE([qemu-block],
+                AC_HELP_STRING([--enable-qemu-block],
+                        [Build QEMU Block formats translator]))
+
+if test "x$enable_qemu_block" != "xno"; then
+  PKG_CHECK_MODULES([GLIB], [glib-2.0],
+                    [HAVE_GLIB_2="yes"],
+  		    [HAVE_GLIB_2="no"])
+fi
+
+if test "x$enable_qemu_block" = "xyes" -a "x$HAVE_GLIB_2" = "xno"; then
+   echo "QEMU Block formats translator requires libglib-2.0, but missing."
+   exit 1
+fi
+
+BUILD_QEMU_BLOCK=no
+if test "x${enable_qemu_block}" != "xno" -a "x${HAVE_GLIB_2}" = "xyes"; then
+  BUILD_QEMU_BLOCK=yes
+  AC_DEFINE(HAVE_QEMU_BLOCK, 1, [define if libglib-2.0 library found and QEMU
+                  	     Block translator enabled])
+fi
+
+AM_CONDITIONAL([ENABLE_QEMU_BLOCK], [test x$BUILD_QEMU_BLOCK = xyes])
+
+# end QEMU_BLOCK section
 
 # EPOLL section
 AC_ARG_ENABLE([epoll],
@@ -376,7 +409,7 @@ if test "x$enable_ibverbs" != "xno"; then
                [ibv_get_device_list],
                [HAVE_LIBIBVERBS="yes"],
                [HAVE_LIBIBVERBS="no"])
-  AC_CHECK_LIB([rdmacm], [rdma_create_id], [HAVE_RDMACM="yes"], [HAVE_RDMACM="no"]) 
+  AC_CHECK_LIB([rdmacm], [rdma_create_id], [HAVE_RDMACM="yes"], [HAVE_RDMACM="no"])
 fi
 
 if test "x$enable_ibverbs" = "xyes"; then
@@ -488,11 +521,11 @@ AC_ARG_ENABLE([xml-output],
 BUILD_XML_OUTPUT="yes"
 if test "x$enable_xml_output" != "xno"; then
     #check if libxml is present if so enable HAVE_LIB_XML
-    AM_PATH_XML2([2.6.19])
-
+    m4_ifdef([AM_PATH_XML2],[AM_PATH_XML2([2.6.19])], [no_xml=yes])
     if test "x${no_xml}" = "x"; then
         AC_DEFINE([HAVE_LIB_XML], [1], [Define to 1 if using libxml2.])
     else
+        AC_MSG_WARN([libxml2 devel libraries not found disabling XML support])
         BUILD_XML_OUTPUT="no"
     fi
 else
@@ -538,7 +571,7 @@ dnl Check for argp
 AC_CHECK_HEADER([argp.h], AC_DEFINE(HAVE_ARGP, 1, [have argp]))
 AC_CONFIG_SUBDIRS(argp-standalone)
 BUILD_ARGP_STANDALONE=no
-if test "x${ac_cv_header_argp_h}" = "xno"; then 
+if test "x${ac_cv_header_argp_h}" = "xno"; then
    BUILD_ARGP_STANDALONE=yes
    ARGP_STANDALONE_CPPFLAGS='-I${top_srcdir}/argp-standalone'
    ARGP_STANDALONE_LDADD='${top_builddir}/argp-standalone/libargp.a'
@@ -570,7 +603,7 @@ if test "x${have_posix_fallocate}" = "xyes"; then
 fi
 
 
-# Check the distribution where you are compiling glusterfs on 
+# Check the distribution where you are compiling glusterfs on
 
 GF_DISTRIBUTION=
 AC_CHECK_FILE([/etc/debian_version])
@@ -814,4 +847,5 @@ echo "Block Device backend : $BUILD_BD_XLATOR"
 echo "glupy                : $BUILD_GLUPY"
 echo "Use syslog           : $USE_SYSLOG"
 echo "XML output           : $BUILD_XML_OUTPUT"
+echo "QEMU Block formats   : $BUILD_QEMU_BLOCK"
 echo

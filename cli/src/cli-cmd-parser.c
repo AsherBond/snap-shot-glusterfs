@@ -1763,7 +1763,7 @@ cli_cmd_gsync_set_parse (const char **words, int wordcount, dict_t **options)
         unsigned           cmdi    = 0;
         char               *opwords[] = { "create", "status", "start", "stop",
                                           "config", "force", "delete",
-                                          "push-pem", NULL };
+                                          "push-pem", "detail", NULL };
         char               *w = NULL;
 
         GF_ASSERT (words);
@@ -1776,7 +1776,7 @@ cli_cmd_gsync_set_parse (const char **words, int wordcount, dict_t **options)
         /* new syntax:
          *
          * volume geo-replication $m $s create [push-pem] [force]
-         * volume geo-replication [$m [$s]] status
+         * volume geo-replication [$m [$s]] status [detail]
          * volume geo-replication [$m] $s config [[!]$opt [$val]]
          * volume geo-replication $m $s start|stop [force]
          * volume geo-replication $m $s delete
@@ -1810,6 +1810,13 @@ cli_cmd_gsync_set_parse (const char **words, int wordcount, dict_t **options)
                 if (slavei == 3)
                         masteri = 2;
         } else if (i <= 3) {
+                if (!strcmp ((char *)words[wordcount-1], "detail")) {
+                        /* For status detail it is mandatory to provide
+                         * both master and slave */
+                        ret = -1;
+                        goto out;
+                }
+
                 /* no $s, can only be status cmd
                  * (with either a single $m before it or nothing)
                  * -- these conditions imply that i <= 3 after
@@ -1872,6 +1879,21 @@ cli_cmd_gsync_set_parse (const char **words, int wordcount, dict_t **options)
         ret = force_push_pem_parse (words, wordcount, dict, &cmdi);
         if (ret)
                 goto out;
+
+        if (!strcmp ((char *)words[wordcount-1], "detail")) {
+                if (strcmp ((char *)words[wordcount-2], "status")) {
+                        ret = -1;
+                        goto out;
+                }
+                if (!slavei || !masteri) {
+                        ret = -1;
+                        goto out;
+                }
+                ret = dict_set_uint32 (dict, "status-detail", _gf_true);
+                if (ret)
+                        goto out;
+                cmdi++;
+        }
 
         if (type != GF_GSYNC_OPTION_TYPE_CONFIG &&
             (cmdi < wordcount - 1 || glob))

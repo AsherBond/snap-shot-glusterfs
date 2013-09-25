@@ -218,7 +218,6 @@ def distribute(*resources):
     master, slave = resources
     mvol = Volinfo(master.volume, master.host)
     logging.debug('master bricks: ' + repr(mvol.bricks))
-    locmbricks = [ b['dir'] for b in mvol.bricks if is_host_local(b['host']) ]
     prelude  = []
     si = slave
     if isinstance(slave, SSH):
@@ -240,7 +239,7 @@ def distribute(*resources):
     else:
         slavenodes = set(b['host'] for b in sbricks)
         if isinstance(slave, SSH) and not gconf.isolated_slave:
-            rap = SSH.parse_ssh_address(slave.remote_addr)
+            rap = SSH.parse_ssh_address(slave)
             slaves = [ 'ssh://' + rap['user'] + '@' + h + ':' + si.url for h in slavenodes ]
         else:
             slavevols = [ h + ':' + si.volume for h in slavenodes ]
@@ -248,11 +247,8 @@ def distribute(*resources):
                 slaves = [ 'ssh://' + rap.remote_addr + ':' + v for v in slavevols ]
             else:
                 slaves = slavevols
-    locmbricks.sort()
-    slaves.sort()
-    workerspex = []
-    for i in range(len(locmbricks)):
-        workerspex.append((locmbricks[i], slaves[i % len(slaves)]))
+
+    workerspex = [ (brick['dir'], slaves[idx % len(slaves)]) for idx, brick in enumerate(mvol.bricks) if is_host_local(brick['host']) ]
     logging.info('worker specs: ' + repr(workerspex))
     return workerspex, suuid
 

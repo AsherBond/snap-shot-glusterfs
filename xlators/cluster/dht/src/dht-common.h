@@ -183,6 +183,7 @@ struct dht_local {
         xlator_t        *link_subvol;
 
         struct dht_rebalance_ rebalance;
+        xlator_t        *first_up_subvol;
 
 };
 typedef struct dht_local dht_local_t;
@@ -211,6 +212,10 @@ enum gf_defrag_status_t {
         GF_DEFRAG_STATUS_STOPPED,
         GF_DEFRAG_STATUS_COMPLETE,
         GF_DEFRAG_STATUS_FAILED,
+        GF_DEFRAG_STATUS_LAYOUT_FIX_STARTED,
+        GF_DEFRAG_STATUS_LAYOUT_FIX_STOPPED,
+        GF_DEFRAG_STATUS_LAYOUT_FIX_COMPLETE,
+        GF_DEFRAG_STATUS_LAYOUT_FIX_FAILED,
 };
 typedef enum gf_defrag_status_t gf_defrag_status_t;
 

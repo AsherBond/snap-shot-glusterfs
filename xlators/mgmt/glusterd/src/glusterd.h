@@ -40,7 +40,6 @@
 #include "store.h"
 
 #define GLUSTERD_MAX_VOLUME_NAME        1000
-#define DEFAULT_LOG_FILE_DIRECTORY      DATADIR "/log/glusterfs"
 #define GLUSTERD_TR_LOG_SIZE            50
 #define GLUSTERD_NAME                   "glusterd"
 #define GLUSTERD_SOCKET_LISTEN_BACKLOG  128
@@ -48,6 +47,10 @@
 #define GLUSTERD_QUORUM_RATIO_KEY       "cluster.server-quorum-ratio"
 #define GLUSTERD_GLOBAL_OPT_VERSION     "global-option-version"
 #define GLUSTERD_COMMON_PEM_PUB_FILE    "/geo-replication/common_secret.pem.pub"
+#define GEO_CONF_MAX_OPT_VALS           5
+#define GLUSTERD_CREATE_HOOK_SCRIPT     "/hooks/1/gsync-create/post/" \
+                                        "S56glusterd-geo-rep-create-post.sh"
+
 
 #define GLUSTERD_SERVER_QUORUM "server"
 
@@ -244,6 +247,8 @@ struct glusterd_rebalance_ {
         uuid_t                  rebalance_id;
         double                  rebalance_time;
         glusterd_op_t           op;
+        dict_t                  *dict; /* Dict to store misc information
+                                        * like list of bricks being removed */
 };
 
 typedef struct glusterd_rebalance_ glusterd_rebalance_t;
@@ -319,6 +324,12 @@ typedef struct glusterd_pending_node_ {
         gd_node_type type;
         int32_t index;
 } glusterd_pending_node_t;
+
+struct gsync_config_opt_vals_ {
+        char  *op_name;
+        int    no_of_pos_vals;
+        char  *values[GEO_CONF_MAX_OPT_VALS];
+};
 
 enum glusterd_op_ret {
         GLUSTERD_CONNECTION_AWAITED = 100,

@@ -1200,7 +1200,7 @@ glusterfs_handle_rpc_msg (rpcsvc_request_t *req)
         return ret;
 }
 
-rpcclnt_cb_actor_t gluster_cbk_actors[] = {
+rpcclnt_cb_actor_t mgmt_cbk_actors[] = {
         [GF_CBK_FETCHSPEC] = {"FETCHSPEC", GF_CBK_FETCHSPEC, mgmt_cbk_spec },
         [GF_CBK_EVENT_NOTIFY] = {"EVENTNOTIFY", GF_CBK_EVENT_NOTIFY,
                                  mgmt_cbk_event},
@@ -1211,7 +1211,7 @@ struct rpcclnt_cb_program mgmt_cbk_prog = {
         .progname  = "GlusterFS Callback",
         .prognum   = GLUSTER_CBK_PROGRAM,
         .progver   = GLUSTER_CBK_VERSION,
-        .actors    = gluster_cbk_actors,
+        .actors    = mgmt_cbk_actors,
         .numactors = GF_CBK_MAXVALUE,
 };
 
@@ -1821,30 +1821,52 @@ static int
 mgmt_rpc_notify (struct rpc_clnt *rpc, void *mydata, rpc_clnt_event_t event,
                  void *data)
 {
-        xlator_t        *this = NULL;
-        cmd_args_t      *cmd_args = NULL;
-        glusterfs_ctx_t *ctx = NULL;
+        xlator_t         *this = NULL;
+        glusterfs_ctx_t  *ctx = NULL;
         int              ret = 0;
-        int need_term = 0;
-        int emval = 0;
+        server_cmdline_t *server = NULL;
+        rpc_transport_t  *rpc_trans = NULL;
+        int              need_term = 0;
+        int              emval = 0;
 
         this = mydata;
+        rpc_trans = rpc->conn.trans;
         ctx = this->ctx;
-        cmd_args = &ctx->cmd_args;
+
         switch (event) {
         case RPC_CLNT_DISCONNECT:
                 if (!ctx->active) {
-                        cmd_args->max_connect_attempts--;
                         gf_log ("glusterfsd-mgmt", GF_LOG_ERROR,
-                                "failed to connect with remote-host: %s",
+                                "failed to connect with remote-host: %s (%s)",
+                                ctx->cmd_args.volfile_server,
                                 strerror (errno));
-                        gf_log ("glusterfsd-mgmt", GF_LOG_INFO,
-                                "%d connect attempts left",
-                                cmd_args->max_connect_attempts);
-                        if (0 >= cmd_args->max_connect_attempts) {
+                        server = ctx->cmd_args.curr_server;
+                        if (server->list.next == &ctx->cmd_args.volfile_servers) {
                                 need_term = 1;
                                 emval = ENOTCONN;
+                                gf_log("glusterfsd-mgmt", GF_LOG_INFO,
+                                       "Exhausted all volfile servers");
+                                break;
                         }
+                        server = list_entry (server->list.next, typeof(*server),
+                                             list);
+                        ctx->cmd_args.curr_server = server;
+                        ctx->cmd_args.volfile_server = server->volfile_server;
+
+                        ret = dict_set_str (rpc_trans->options,
+                                            "remote-host",
+                                            server->volfile_server);
+                        if (ret != 0) {
+                                gf_log ("glusterfsd-mgmt", GF_LOG_ERROR,
+                                        "failed to set remote-host: %s",
+                                        server->volfile_server);
+                                need_term = 1;
+                                emval = ENOTCONN;
+                                break;
+                        }
+                        gf_log ("glusterfsd-mgmt", GF_LOG_INFO,
+                                "connecting to next volfile server %s",
+                                server->volfile_server);
                 }
                 break;
         case RPC_CLNT_CONNECT:
@@ -2048,7 +2070,8 @@ glusterfs_mgmt_init (glusterfs_ctx_t *ctx)
 
         ret = rpc_clnt_register_notify (rpc, mgmt_rpc_notify, THIS);
         if (ret) {
-                gf_log (THIS->name, GF_LOG_WARNING, "failed to register notify function");
+                gf_log (THIS->name, GF_LOG_WARNING,
+                        "failed to register notify function");
                 goto out;
         }
 

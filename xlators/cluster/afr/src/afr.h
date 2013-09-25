@@ -180,6 +180,7 @@ typedef enum {
         AFR_SELF_HEAL_NOT_ATTEMPTED,
         AFR_SELF_HEAL_STARTED,
         AFR_SELF_HEAL_FAILED,
+        AFR_SELF_HEAL_SYNC_BEGIN,
 } afr_self_heal_status;
 
 typedef struct {
@@ -294,6 +295,8 @@ struct afr_self_heal_ {
         afr_post_remove_call_t post_remove_call;
 
         char    *data_sh_info;
+        char    *metadata_sh_info;
+
         loc_t parent_loc;
         call_frame_t *orig_frame;
         call_frame_t *old_loop_frame;
@@ -496,6 +499,11 @@ typedef struct _afr_local {
 	*/
 	gf_boolean_t      stable_write;
 
+	/* This write appended to the file. Nnot necessarily O_APPEND,
+	   just means the offset of write was at the end of file.
+	*/
+	gf_boolean_t      append_write;
+
         /*
           This struct contains the arguments for the "continuation"
           (scheme-like) of fops
@@ -594,7 +602,9 @@ typedef struct _afr_local {
                 struct {
                         struct iatt prebuf;
                         struct iatt postbuf;
+                } inode_wfop; //common structure for all inode-write-fops
 
+                struct {
                         int32_t op_ret;
 
                         struct iovec *vector;
@@ -605,34 +615,21 @@ typedef struct _afr_local {
                 } writev;
 
                 struct {
-                        struct iatt prebuf;
-                        struct iatt postbuf;
-                } fsync;
-
-                struct {
                         off_t offset;
-                        struct iatt prebuf;
-                        struct iatt postbuf;
                 } truncate;
 
                 struct {
                         off_t offset;
-                        struct iatt prebuf;
-                        struct iatt postbuf;
                 } ftruncate;
 
                 struct {
                         struct iatt in_buf;
                         int32_t valid;
-                        struct iatt preop_buf;
-                        struct iatt postop_buf;
                 } setattr;
 
                 struct {
                         struct iatt in_buf;
                         int32_t valid;
-                        struct iatt preop_buf;
-                        struct iatt postop_buf;
                 } fsetattr;
 
                 struct {
@@ -699,15 +696,11 @@ typedef struct _afr_local {
 			int32_t mode;
 			off_t offset;
 			size_t len;
-			struct iatt prebuf;
-			struct iatt postbuf;
 		} fallocate;
 
 		struct {
 			off_t offset;
 			size_t len;
-			struct iatt prebuf;
-			struct iatt postbuf;
 		} discard;
 
         } cont;

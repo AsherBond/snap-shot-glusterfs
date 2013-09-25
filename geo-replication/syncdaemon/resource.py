@@ -12,7 +12,7 @@ import logging
 import tempfile
 import threading
 import subprocess
-from errno import EEXIST, ENOENT, ENODATA, ENOTDIR, ELOOP, EISDIR, ENOTEMPTY
+from errno import EEXIST, ENOENT, ENODATA, ENOTDIR, ELOOP, EISDIR, ENOTEMPTY, ESTALE, EINVAL
 from select import error as SelectError
 
 from gconf import gconf
@@ -21,7 +21,7 @@ from repce import RepceServer, RepceClient
 from  master import gmaster_builder
 import syncdutils
 from syncdutils import GsyncdError, select, privileged, boolify, funcode
-from syncdutils import umask, entry2pb, gauxpfx, errno_wrap
+from syncdutils import umask, entry2pb, gauxpfx, errno_wrap, lstat
 
 UrlRX  = re.compile('\A(\w+)://([^ *?[]*)\Z')
 HostRX = re.compile('[a-z\d](?:[a-z\d.-]*[a-z\d])?', re.I)
@@ -398,7 +398,7 @@ class Server(object):
 
     @classmethod
     def gfid(cls, gfidpath):
-        return errno_wrap(Xattr.lgetxattr, [gfidpath, 'glusterfs.gfid', cls.GX_GFID_CANONICAL_LEN], [ENOENT])
+        return errno_wrap(Xattr.lgetxattr, [gfidpath, 'glusterfs.gfid.string', cls.GX_GFID_CANONICAL_LEN], [ENOENT])
 
     @classmethod
     def node_uuid(cls, path='.'):
@@ -429,6 +429,18 @@ class Server(object):
     @_pathguard
     def set_xtime(cls, path, uuid, mark):
         """set @mark as xtime for @uuid on @path"""
+        Xattr.lsetxattr(path, '.'.join([cls.GX_NSPACE, uuid, 'xtime']), struct.pack('!II', *mark))
+
+    @classmethod
+    @_pathguard
+    def set_xtime_remote(cls, path, uuid, mark):
+        """
+        set @mark as xtime for @uuid on @path
+        the difference b/w this and set_xtime() being
+        set_xtime() being overloaded to set the xtime
+        on the brick (this method sets xtime on the
+        remote slave)
+        """
         Xattr.lsetxattr(path, '.'.join([cls.GX_NSPACE, uuid, 'xtime']), struct.pack('!II', *mark))
 
     @classmethod
@@ -497,19 +509,30 @@ class Server(object):
                         time.sleep(1)
                     else:
                         break
-            elif op == 'CREATE':
+            elif op in ['CREATE', 'MKNOD']:
                 blob = entry_pack_reg(gfid, bname, e['stat'])
             elif op == 'MKDIR':
                 blob = entry_pack_mkdir(gfid, bname, e['stat'])
             elif op == 'LINK':
-                errno_wrap(os.link, [os.path.join(pfx, gfid), entry], [ENOENT, EEXIST])
+                slink = os.path.join(pfx, gfid)
+                st = lstat(slink)
+                if isinstance(st, int):
+                    (pg, bname) = entry2pb(entry)
+                    blob = entry_pack_reg(gfid, bname, e['stat'])
+                else:
+                    errno_wrap(os.link, [slink, entry], [ENOENT, EEXIST])
             elif op == 'SYMLINK':
                 blob = entry_pack_symlink(gfid, bname, e['link'], e['stat'])
             elif op == 'RENAME':
                 en = e['entry1']
-                errno_wrap(os.rename, [entry, en], [ENOENT, EEXIST])
+                st = lstat(entry)
+                if isinstance(st, int):
+                    (pg, bname) = entry2pb(en)
+                    blob = entry_pack_reg(gfid, bname, e['stat'])
+                else:
+                    errno_wrap(os.rename, [entry, en], [ENOENT, EEXIST])
             if blob:
-                errno_wrap(Xattr.lsetxattr_l, [pg, 'glusterfs.gfid.newfile', blob], [ENOENT, EEXIST])
+                errno_wrap(Xattr.lsetxattr_l, [pg, 'glusterfs.gfid.newfile', blob], [EEXIST], [ENOENT, ESTALE, EINVAL])
 
     @classmethod
     def changelog_register(cls, cl_brick, cl_dir, cl_log, cl_level, retries = 0):
@@ -1059,16 +1082,17 @@ class SSH(AbstractUrl, SlaveRemote):
         self.volume = inner_url[1:]
 
     @staticmethod
-    def parse_ssh_address(addr):
-        m = re.match('([^@]+)@(.+)', addr)
+    def parse_ssh_address(self):
+        m = re.match('([^@]+)@(.+)', self.remote_addr)
         if m:
             u, h = m.groups()
         else:
-            u, h = syncdutils.getusername(), addr
+            u, h = syncdutils.getusername(), self.remote_addr
+        self.remotehost = h
         return {'user': u, 'host': h}
 
     def canonical_path(self):
-        rap = self.parse_ssh_address(self.remote_addr)
+        rap = self.parse_ssh_address(self)
         remote_addr = '@'.join([rap['user'], gethostbyname(rap['host'])])
         return ':'.join([remote_addr, self.inner_rsc.get_url(canonical=True)])
 
@@ -1115,9 +1139,15 @@ class SSH(AbstractUrl, SlaveRemote):
         """
         if go_daemon == 'done':
             return self.start_fd_client(*self.fd_pair)
-        gconf.setup_ssh_ctl(tempfile.mkdtemp(prefix='gsyncd-aux-ssh-'))
+
+        syncdutils.setup_ssh_ctl(tempfile.mkdtemp(prefix='gsyncd-aux-ssh-'),
+                                 self.remote_addr,
+                                 self.inner_rsc.url)
+
         deferred = go_daemon == 'postconn'
-        ret = sup(self, gconf.ssh_command.split() + gconf.ssh_ctl_args + [self.remote_addr], slave=self.inner_rsc.url, deferred=deferred)
+        ret = sup(self, gconf.ssh_command.split() + gconf.ssh_ctl_args + [self.remote_addr],
+                  slave=self.inner_rsc.url, deferred=deferred)
+
         if deferred:
             # send a message to peer so that we can wait for
             # the answer from which we know connection is

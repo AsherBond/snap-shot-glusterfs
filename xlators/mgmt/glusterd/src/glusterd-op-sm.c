@@ -1901,6 +1901,105 @@ out:
 }
 
 static int
+_add_brick_name_to_dict (dict_t *dict, char *key, glusterd_brickinfo_t *brick)
+{
+        int     ret = -1;
+        char    tmp[1024] = {0,};
+        char    *brickname = NULL;
+        xlator_t *this = NULL;
+
+        GF_ASSERT (dict);
+        GF_ASSERT (key);
+        GF_ASSERT (brick);
+
+        this = THIS;
+        GF_ASSERT (this);
+
+        snprintf (tmp, sizeof (tmp), "%s:%s", brick->hostname, brick->path);
+        brickname = gf_strdup (tmp);
+        if (!brickname) {
+                gf_log (this->name, GF_LOG_ERROR, "Failed to dup brick name");
+                goto out;
+        }
+
+        ret = dict_set_dynstr (dict, key, brickname);
+        if (ret) {
+                gf_log (this->name, GF_LOG_ERROR,
+                        "Failed to add brick name to dict");
+                goto out;
+        }
+        brickname = NULL;
+out:
+        if (brickname)
+                GF_FREE (brickname);
+        return ret;
+}
+
+static int
+_add_remove_bricks_to_dict (dict_t *dict, glusterd_volinfo_t *volinfo,
+                            char *prefix)
+{
+        int             ret = -1;
+        int             count = 0;
+        int             i = 0;
+        char            brick_key[1024] = {0,};
+        char            dict_key[1024] ={0,};
+        char            *brick = NULL;
+        xlator_t        *this = NULL;
+
+        GF_ASSERT (dict);
+        GF_ASSERT (volinfo);
+        GF_ASSERT (prefix);
+
+        this = THIS;
+        GF_ASSERT (this);
+
+        ret = dict_get_int32 (volinfo->rebal.dict, "count", &count);
+        if (ret) {
+                gf_log (this->name, GF_LOG_ERROR,
+                        "Failed to get brick count");
+                goto out;
+        }
+
+        snprintf (dict_key, sizeof (dict_key), "%s.count", prefix);
+        ret = dict_set_int32 (dict, dict_key, count);
+        if (ret) {
+                gf_log (this->name, GF_LOG_ERROR,
+                        "Failed to set brick count in dict");
+                goto out;
+        }
+
+        for (i = 1; i <= count; i++) {
+                memset (brick_key, 0, sizeof (brick_key));
+                snprintf (brick_key, sizeof (brick_key), "brick%d", i);
+
+                ret = dict_get_str (volinfo->rebal.dict, brick_key, &brick);
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "Unable to get %s", brick_key);
+                        goto out;
+                }
+
+                memset (dict_key, 0, sizeof (dict_key));
+                snprintf (dict_key, sizeof (dict_key), "%s.%s", prefix,
+                          brick_key);
+                ret = dict_set_str (dict, dict_key, brick);
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "Failed to add brick to dict");
+                        goto out;
+                }
+                brick = NULL;
+        }
+
+out:
+        return ret;
+}
+
+/* This adds the respective task-id and all available parameters of a task into
+ * a dictionary
+ */
+static int
 _add_task_to_dict (dict_t *dict, glusterd_volinfo_t *volinfo, int op, int index)
 {
 
@@ -1917,13 +2016,34 @@ _add_task_to_dict (dict_t *dict, glusterd_volinfo_t *volinfo, int op, int index)
         GF_ASSERT (this);
 
         switch (op) {
-        case GD_OP_REBALANCE:
         case GD_OP_REMOVE_BRICK:
+                snprintf (key, sizeof (key), "task%d", index);
+                ret = _add_remove_bricks_to_dict (dict, volinfo, key);
+                if (ret) {
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "Failed to add remove bricks to dict");
+                        goto out;
+                }
+        case GD_OP_REBALANCE:
                 uuid_str = gf_strdup (uuid_utoa (volinfo->rebal.rebalance_id));
                 status = volinfo->rebal.defrag_status;
                 break;
 
         case GD_OP_REPLACE_BRICK:
+                snprintf (key, sizeof (key), "task%d.src-brick", index);
+                ret = _add_brick_name_to_dict (dict, key,
+                                               volinfo->rep_brick.src_brick);
+                if (ret)
+                        goto out;
+                memset (key, 0, sizeof (key));
+
+                snprintf (key, sizeof (key), "task%d.dst-brick", index);
+                ret = _add_brick_name_to_dict (dict, key,
+                                               volinfo->rep_brick.dst_brick);
+                if (ret)
+                        goto out;
+                memset (key, 0, sizeof (key));
+
                 uuid_str = gf_strdup (uuid_utoa (volinfo->rep_brick.rb_id));
                 status = volinfo->rep_brick.rb_status;
                 break;
@@ -1936,8 +2056,7 @@ _add_task_to_dict (dict_t *dict, glusterd_volinfo_t *volinfo, int op, int index)
         }
 
         snprintf (key, sizeof (key), "task%d.type", index);
-        ret = dict_set_str (dict, key,
-                            (char *)gd_op_list[op]);
+        ret = dict_set_str (dict, key, (char *)gd_op_list[op]);
         if (ret) {
                 gf_log (this->name, GF_LOG_ERROR,
                         "Error setting task type in dict");
@@ -1946,7 +2065,6 @@ _add_task_to_dict (dict_t *dict, glusterd_volinfo_t *volinfo, int op, int index)
 
         memset (key, 0, sizeof (key));
         snprintf (key, sizeof (key), "task%d.id", index);
-
 
         if (!uuid_str)
                 goto out;
@@ -2954,6 +3072,97 @@ out:
         return ret;
 }
 
+static int
+reassign_defrag_status (dict_t *dict, char *key, gf_defrag_status_t *status)
+{
+        int ret = 0;
+
+        if (!*status)
+                return ret;
+
+        switch (*status) {
+        case GF_DEFRAG_STATUS_STARTED:
+                *status = GF_DEFRAG_STATUS_LAYOUT_FIX_STARTED;
+                break;
+
+        case GF_DEFRAG_STATUS_STOPPED:
+                *status = GF_DEFRAG_STATUS_LAYOUT_FIX_STOPPED;
+                break;
+
+        case GF_DEFRAG_STATUS_COMPLETE:
+                *status = GF_DEFRAG_STATUS_LAYOUT_FIX_COMPLETE;
+                break;
+
+        case GF_DEFRAG_STATUS_FAILED:
+                *status = GF_DEFRAG_STATUS_LAYOUT_FIX_FAILED;
+                break;
+        default:
+                break;
+         }
+
+        ret = dict_set_int32(dict, key, *status);
+        if (ret)
+                gf_log (THIS->name, GF_LOG_WARNING,
+                        "failed to reset defrag %s in dict", key);
+
+        return ret;
+}
+
+/* Check and reassign the defrag_status enum got from the rebalance process
+ * of all peers so that the rebalance-status CLI command can display if a
+ * full-rebalance or just a fix-layout was carried out.
+ */
+static int
+glusterd_op_check_peer_defrag_status (dict_t *dict, int count)
+{
+        glusterd_volinfo_t *volinfo  = NULL;
+        gf_defrag_status_t status    = GF_DEFRAG_STATUS_NOT_STARTED;
+        char               key[256]  = {0,};
+        char               *volname  = NULL;
+        int                ret       = -1;
+        int                i         = 1;
+
+        ret = dict_get_str (dict, "volname", &volname);
+        if (ret) {
+                gf_log (THIS->name, GF_LOG_WARNING, "Unable to get volume name");
+                goto out;
+        }
+
+        ret = glusterd_volinfo_find (volname, &volinfo);
+        if (ret) {
+                gf_log (THIS->name, GF_LOG_WARNING, FMTSTR_CHECK_VOL_EXISTS,
+                        volname);
+                goto out;
+        }
+
+        if (volinfo->rebal.defrag_cmd != GF_DEFRAG_CMD_START_LAYOUT_FIX) {
+                /* Fix layout was not issued; we don't need to reassign
+                   the status */
+                ret = 0;
+                goto out;
+        }
+
+        do {
+                memset (key, 0, 256);
+                snprintf (key, 256, "status-%d", i);
+                ret = dict_get_int32 (dict, key, (int32_t *)&status);
+                if (ret) {
+                        gf_log (THIS->name, GF_LOG_WARNING,
+                                "failed to get defrag %s", key);
+                        goto out;
+                }
+                ret = reassign_defrag_status (dict, key, &status);
+                if (ret)
+                        goto out;
+                i++;
+        } while (i <= count);
+
+        ret = 0;
+out:
+        return ret;
+
+}
+
 /* This function is used to modify the op_ctx dict before sending it back
  * to cli. This is useful in situations like changing the peer uuids to
  * hostnames etc.
@@ -3063,6 +3272,11 @@ glusterd_op_modify_op_ctx (glusterd_op_t op, void *ctx)
                 if (ret)
                         gf_log (this->name, GF_LOG_WARNING,
                                 "Failed uuid to hostname conversion");
+
+                ret = glusterd_op_check_peer_defrag_status (op_ctx, count);
+                if (ret)
+                        gf_log (this->name, GF_LOG_ERROR,
+                                "Failed to reset defrag status for fix-layout");
                 break;
 
         default:

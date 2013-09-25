@@ -20,7 +20,6 @@
   - handle SEEK_END failure in _lseek()
   - handle umask (per filesystem?)
   - make itables LRU based
-  - implement glfs_fini()
   - 0-copy for readv/writev
   - reconcile the open/creat mess
 */
@@ -51,6 +50,7 @@
 #include "glfs.h"
 #include "glfs-internal.h"
 #include "hashfn.h"
+#include "rpc-clnt.h"
 
 
 static gf_boolean_t
@@ -85,7 +85,7 @@ glusterfs_ctx_defaults_init (glusterfs_ctx_t *ctx)
 		goto err;
 	}
 
-	ctx->env = syncenv_new (0);
+	ctx->env = syncenv_new (0, 0, 0);
 	if (!ctx->env) {
 		goto err;
 	}
@@ -475,17 +475,25 @@ int
 glfs_set_logging (struct glfs *fs, const char *logfile, int loglevel)
 {
 	int  ret = 0;
+        char *tmplog = NULL;
 
-	if (logfile) {
-                /* passing ident as NULL means to use default ident for syslog */
-		ret = gf_log_init (fs->ctx, logfile, NULL);
-		if (ret)
-			return ret;
-	}
+        if (!logfile) {
+                ret = gf_set_log_file_path (&fs->ctx->cmd_args);
+                if (ret)
+                        goto out;
+                tmplog = fs->ctx->cmd_args.log_file;
+        } else {
+                tmplog = (char *)logfile;
+        }
+
+        ret = gf_log_init (fs->ctx, tmplog, NULL);
+        if (ret)
+                goto out;
 
 	if (loglevel >= 0)
 		gf_log_set_loglevel (loglevel);
 
+out:
 	return ret;
 }
 
@@ -595,7 +603,47 @@ glfs_init (struct glfs *fs)
 int
 glfs_fini (struct glfs *fs)
 {
-	int  ret = -1;
+        int  ret = -1;
+        xlator_t *subvol = NULL;
+        glusterfs_ctx_t *ctx = NULL;
+        call_pool_t *call_pool = NULL;
+        int countdown = 100;
 
-	return ret;
+        ctx = fs->ctx;
+
+        if (ctx->mgmt) {
+                rpc_clnt_disable (ctx->mgmt);
+                ctx->mgmt = NULL;
+        }
+
+        __glfs_entry_fs (fs);
+
+        call_pool = fs->ctx->pool;
+
+        while (countdown--) {
+                /* give some time for background frames to finish */
+                if (!call_pool->cnt)
+                        break;
+                usleep (100000);
+        }
+        /* leaked frames may exist, we ignore */
+
+        subvol = glfs_active_subvol (fs);
+        if (subvol) {
+                /* PARENT_DOWN within glfs_subvol_done() is issued only
+                   on graph switch (new graph should activiate and
+                   decrement the extra @winds count taken in glfs_graph_setup()
+
+                   Since we are explicitly destroying, PARENT_DOWN is necessary
+                */
+                xlator_notify (subvol, GF_EVENT_PARENT_DOWN, subvol, 0);
+                /* TBD: wait for CHILD_DOWN before exiting, in case of
+                   asynchronous cleanup like graceful socket disconnection
+                   in the future.
+                */
+        }
+
+        glfs_subvol_done (fs, subvol);
+
+        return ret;
 }

@@ -845,6 +845,15 @@ struct volopt_map_entry glusterd_volopt_map[] = {
           .description = "enable/disable read-ahead translator in the volume.",
           .flags       = OPT_FLAG_CLIENT_OPT | OPT_FLAG_XLATOR_OPT
         },
+        { .key         = "performance.readdir-ahead",
+          .voltype     = "performance/readdir-ahead",
+          .option      = "!perf",
+          .value       = "off",
+          .op_version  = 3,
+          .description = "enable/disable readdir-ahead translator in the volume.",
+          .flags       = OPT_FLAG_CLIENT_OPT | OPT_FLAG_XLATOR_OPT
+        },
+
         { .key         = "performance.io-cache",
           .voltype     = "performance/io-cache",
           .option      = "!perf",
@@ -944,6 +953,17 @@ struct volopt_map_entry glusterd_volopt_map[] = {
           .flags      = OPT_FLAG_CLIENT_OPT
         },
 
+	/* Feature translators */
+        { .key         = "features.file-snapshot",
+          .voltype     = "features/qemu-block",
+          .option      = "!feat",
+          .value       = "off",
+          .op_version  = 3,
+          .description = "enable/disable file-snapshot feature in the "
+                         "volume.",
+          .flags       = OPT_FLAG_CLIENT_OPT | OPT_FLAG_XLATOR_OPT
+        },
+
         /* Quota xlator options */
         { .key        = VKEY_FEATURES_LIMIT_USAGE,
           .voltype    = "features/quota",
@@ -986,6 +1006,22 @@ struct volopt_map_entry glusterd_volopt_map[] = {
           .type        = NO_DOC,
           .flags       = OPT_FLAG_FORCE,
           .op_version  = 1
+        },
+        { .key         = VKEY_MARKER_XTIME_FORCE,
+          .voltype     = "features/marker",
+          .option      = "gsync-force-xtime",
+          .value       = "off",
+          .type        = NO_DOC,
+          .flags       = OPT_FLAG_FORCE,
+          .op_version  = 2
+        },
+        { .key         = VKEY_MARKER_XTIME_FORCE,
+          .voltype     = "features/marker",
+          .option      = "!gsync-force-xtime",
+          .value       = "off",
+          .type        = NO_DOC,
+          .flags       = OPT_FLAG_FORCE,
+          .op_version  = 2
         },
         { .key         = VKEY_FEATURES_QUOTA,
           .voltype     = "features/marker",
@@ -1188,6 +1224,12 @@ struct volopt_map_entry glusterd_volopt_map[] = {
           .type        = GLOBAL_DOC,
           .op_version  = 1
         },
+        { .key         = "nfs.mount-rmtab",
+          .voltype     = "nfs/server",
+          .option      = "nfs.mount-rmtab",
+          .type        = GLOBAL_DOC,
+          .op_version  = 1
+        },
         { .key         = "nfs.server-aux-gids",
           .voltype     = "nfs/server",
           .option      = "nfs.server-aux-gids",
@@ -1203,6 +1245,24 @@ struct volopt_map_entry glusterd_volopt_map[] = {
         { .key         = "nfs.drc-size",
           .voltype     = "nfs/server",
           .option      = "nfs.drc-size",
+          .type        = GLOBAL_DOC,
+          .op_version  = 3
+        },
+        { .key         = "nfs.read-size",
+          .voltype     = "nfs/server",
+          .option      = "nfs3.read-size",
+          .type        = GLOBAL_DOC,
+          .op_version  = 3
+        },
+        { .key         = "nfs.write-size",
+          .voltype     = "nfs/server",
+          .option      = "nfs3.write-size",
+          .type        = GLOBAL_DOC,
+          .op_version  = 3
+        },
+        { .key         = "nfs.readdir-size",
+          .voltype     = "nfs/server",
+          .option      = "nfs3.readdir-size",
           .type        = GLOBAL_DOC,
           .op_version  = 3
         },
