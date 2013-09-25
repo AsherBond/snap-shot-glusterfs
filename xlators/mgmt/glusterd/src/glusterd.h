@@ -99,7 +99,6 @@ typedef enum glusterd_op_ {
         GD_OP_COPY_FILE,
         GD_OP_SYS_EXEC,
         GD_OP_GSYNC_CREATE,
-        GD_OP_SNAP,
         GD_OP_MAX,
 } glusterd_op_t;
 
@@ -621,9 +620,6 @@ glusterd_handle_quota (rpcsvc_request_t *req);
 
 int
 glusterd_handle_fsm_log (rpcsvc_request_t *req);
-
-int
-glusterd_handle_snap (rpcsvc_request_t *req);
 
 int
 glusterd_xfer_cli_deprobe_resp (rpcsvc_request_t *req, int32_t op_ret,

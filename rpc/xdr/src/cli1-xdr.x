@@ -69,17 +69,6 @@ enum gf1_cli_op_flags {
         GF_CLI_FLAG_OP_FORCE = 1
 };
 
-enum gf1_cli_snapshot {
-        GF_SNAP_OPTION_TYPE_NONE,
-        GF_SNAP_OPTION_TYPE_CREATE,
-        GF_SNAP_OPTION_TYPE_STATUS,
-        GF_SNAP_OPTION_TYPE_LIST,
-        GF_SNAP_OPTION_TYPE_INFO,
-        GF_SNAP_OPTION_TYPE_CONFIG,
-        GF_SNAP_OPTION_TYPE_RESTORE,
-        GF_SNAP_OPTION_TYPE_DELETE
-};
-
 enum gf1_cli_gsync_set {
         GF_GSYNC_OPTION_TYPE_NONE,
         GF_GSYNC_OPTION_TYPE_START,

@@ -4428,110 +4428,6 @@ out:
         return ret;
 }
 
-int
-gf_cli_snap_cbk (struct rpc_req *req, struct iovec *iov,
-                 int count, void *myframe)
-{
-        char              *snapname = NULL;
-        call_frame_t      *frame    = NULL;
-        dict_t            *dict     = NULL;
-        gf_cli_rsp         rsp      = {0, };
-        int32_t            type     = 0;
-        int                ret      = -1;
-
-        if (req->rpc_status == -1) {
-                ret = -1;
-                goto out;
-        }
-
-        frame = myframe;
-
-        ret = xdr_to_generic (*iov, &rsp, (xdrproc_t)xdr_gf_cli_rsp);
-        if (ret < 0) {
-                gf_log (frame->this->name, GF_LOG_ERROR,
-                        "Failed to decode xdr response");
-                goto out;
-        }
-        frame = myframe;
-
-        dict = dict_new ();
-
-        if (!dict) {
-                ret = -1;
-                goto out;
-        }
-
-        ret = dict_unserialize (rsp.dict.dict_val, rsp.dict.dict_len, &dict);
-        if (ret)
-                goto out;
-
-        if (rsp.op_ret) {
-                cli_err ("%s", rsp.op_errstr ? rsp.op_errstr :
-                         "snapshot command unsuccessful");
-                ret = rsp.op_ret;
-                goto out;
-        }
-
-        ret = dict_get_int32 (dict, "type", &type);
-        if (ret) {
-                gf_log (frame->this->name, GF_LOG_ERROR, "failed to get type");
-                goto out;
-        }
-
-        switch (type) {
-                case GF_SNAP_OPTION_TYPE_CREATE:
-                        ret = dict_get_str (dict, "snap_name", &snapname);
-                        if (ret || !snapname)
-                                snapname = "???";
-
-                        cli_out ("Snapshot \"%s\" has been "
-                                 "successfully created.", snapname);
-                break;
-
-                case GF_SNAP_OPTION_TYPE_STATUS:
-                break;
-
-                case GF_SNAP_OPTION_TYPE_LIST:
-                break;
-
-                case GF_SNAP_OPTION_TYPE_INFO:
-                break;
-
-                case GF_SNAP_OPTION_TYPE_CONFIG:
-                break;
-
-                case GF_SNAP_OPTION_TYPE_RESTORE:
-                        ret = dict_get_str (dict, "snap_name", &snapname);
-                        if (ret || !snapname)
-                                snapname = "???";
-
-                        cli_out ("Snapshot \"%s\" has been "
-                                 "successfully restored.", snapname);
-                break;
-
-                case GF_SNAP_OPTION_TYPE_DELETE:
-                        ret = dict_get_str (dict, "snap_name", &snapname);
-                        if (ret || !snapname)
-                                snapname = "???";
-
-                        cli_out ("Snapshot \"%s\" has been "
-                                 "successfully deleted.", snapname);
-                break;
-
-                default:
-                        cli_out ("snapshot command executed successfully");
-        }
-
-out:
-        if (dict)
-                dict_unref (dict);
-        cli_cmd_broadcast_response (ret);
-
-        free (rsp.dict.dict_val);
-
-        return ret;
-}
-
 int32_t
 gf_cli_sys_exec (call_frame_t *frame, xlator_t *this, void *data)
 {
@@ -4606,31 +4502,6 @@ out:
         return ret;
 }
 
-int32_t
-gf_cli_snap (call_frame_t *frame, xlator_t *this,
-             void *data)
-{
-        int           ret    = 0;
-        dict_t       *dict   = NULL;
-        gf_cli_req    req = {{0,}};
-
-        if (!frame || !this || !data) {
-                ret = -1;
-                goto out;
-        }
-
-        dict = data;
-
-        ret = cli_to_glusterd (&req, frame, gf_cli_snap_cbk,
-                               (xdrproc_t) xdr_gf_cli_req, dict,
-                               GLUSTER_CLI_SNAP, this, cli_rpc_prog,
-                               NULL);
-
-out:
-        GF_FREE (req.dict.dict_val);
-
-        return ret;
-}
 
 int
 cli_profile_info_percentage_cmp (void *a, void *b)
@@ -7480,7 +7351,6 @@ struct rpc_clnt_procedure gluster_cli_actors[GLUSTER_CLI_MAXVALUE] = {
 #ifdef HAVE_BD_XLATOR
         [GLUSTER_CLI_BD_OP]            = {"BD_OP", gf_cli_bd_op},
 #endif
-        [GLUSTER_CLI_SNAP]             = {"SNAP", gf_cli_snap},
 };
 
 struct rpc_clnt_program cli_prog = {
